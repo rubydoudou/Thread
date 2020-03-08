@@ -7,7 +7,7 @@
  */
 
 #include <setjmp.h>
-
+#include <string.h>
 #include "aux.h"
 #include "umix.h"
 #include "mycode4.h"
@@ -17,6 +17,7 @@ static int head;  // head of queue
 static int tail;  // tail of queue
 static int lastCreateThread;  
 static int currThread;
+static int lastRunThread; 
 
 static struct thread {			// thread table
 	int valid;			// 1 if entry is valid, else 0
@@ -31,6 +32,64 @@ static struct thread {			// thread table
 } thread[MAXTHREADS];
 
 #define STACKSIZE	65536		// maximum size of thread stack
+
+/*------- helper functions ----------*/
+
+// enqueue thread t to the end 
+static void enqueue(int t) {
+  if (queueSize == 0) {
+    head = t;
+    tail = t;
+    return;
+  }
+  thread[tail].next = t;
+  thread[t].prev = tail;
+  tail = t;
+  queueSize++;
+}
+// dequeue the front of the queue, return the dequeued id.
+static int dequeue() {
+  int returnID = head;
+  if (queueSize == 0) return -1;
+  if (queueSize == 1) {
+    head = -1;
+    tail = -1;
+    queueSize--;
+    return returnID;
+  }
+  int second = thread[head].next;
+  thread[second].prev = -1; 
+  thread[head].next = -1;
+  head = second;
+  queueSize--;
+  return returnID;
+}
+// remove thread t in the queue
+static void removeFromQ(int t) {
+  if (queueSize == 0) return;
+  if (queueSize == 1) {
+    head = -1;
+    tail = -1;
+    queueSize--;
+    return;
+  }  
+  queueSize--;
+  if (head == t) {
+    dequeue();
+    return;
+  }
+  int tPrev = thread[t].prev;
+  if (tail == t) {
+    thread[tPrev].next = -1;
+    thread[t].prev = -1;
+    tail = tPrev;
+    return;
+  }
+  thread[thread[t].prev].next = thread[t].next;
+  thread[thread[t].next].prev = thread[t].prev;
+  thread[t].next = -1;
+  thread[t].prev = -1;
+}
 
 /* 	MyInitThreads() initializes the thread package. Must be the first
  * 	function called by any user program that uses the thread package. 
@@ -53,30 +112,31 @@ void MyInitThreads()
     thread[i].func = 0;
     thread[i].param = 0;
 
-	  char stack[i * STACKSIZE];	// reserve space for thread i's stack
-	  if (((int) &stack[STACKSIZE-1]) - ((int) &stack[0]) + 1 != STACKSIZE) {
+	  char stack[(i+1) * STACKSIZE];	// reserve space for thread i's stack
+	  if (((int) &stack[(i+1) * STACKSIZE-1]) - ((int) &stack[0]) + 1 != STACKSIZE) {
 			Printf("Stack space reservation failed\n");
 			Exit();
 		}
 
     if (setjmp(thread[i].env) == 0) {	// save context of thread i
-			longjmp(thread[0].env, 1);	// back to thread 0
+      if (thread[i].func) {
+        thread[i].func(thread[i].param);
+      }
+		  MyExitThread();			// thread i is done - exit
 		}
-
-		/* here when thread 1 is scheduled for the first time */
-
-		(*func)(param);			// execute func(param)
-
-		MyExitThread();			// thread 1 is done - exit
+    memcpy(thread[i].envInit, thread[i].env, sizeof(jmp_buf)); // copy the initial env
 	}
 
-	}
-
-	thread[0].valid = 1;			// initialize thread 0
+	thread[0].valid = 1;			// thread 0 is the current thread
   currThread = 0;     
-
 	MyInitThreadsCalled = 1;
 
+  lastCreateThread = -1;
+  lastRunThread = -1;
+
+  head = -1;    // Initially queue is empty
+  tail = -1;
+  queueSize = 0;
 }
 
 /* 	MyCreateThread(f, p) creates a new thread to execute f(p),
@@ -93,41 +153,35 @@ int MyCreateThread(void (*f)(), int p)
 		Printf("MyCreateThread: Must call MyInitThreads first\n");
 		Exit();
 	}
+  int newID = lastCreateThread;
+  int findSpot = 0;
 
-	if (setjmp(thread[0].env) == 0) {	// save context of thread 0
+  // find the new thread ID to assign to
+  for (int i = 0; i < MAXTHREADS+1; i++) { 
+    if (thread[newID].valid == 0) {
+      findSpot = 1;
+      break;
+    }
+    newID = (newID + 1) % MAXTHREADS;
+  }
+  if (findSpot == 0) return -1;
 
-		char stack[STACKSIZE];	// reserve space for thread 0's stack
-		void (*func)() = f;	// func saves f on top of stack
-		int param = p;		// param saves p on top of stack
+	thread[newID].func = f;	    // func saves f on top of stack
+	thread[newID].param = p;		// param saves p on top of stack
+  enqueue(newID);
+	thread[newID].valid = 1;	// mark the entry for the new thread valid
+  memcpy(thread[newID].env, thread[newID].envInit, sizeof(jmp_buf));
 
-		if (((int) &stack[STACKSIZE-1]) - ((int) &stack[0]) + 1 != STACKSIZE) {
-			Printf("Stack space reservation failed\n");
-			Exit();
-		}
-
-		if (setjmp(thread[1].env) == 0) {	// save context of 1
-			longjmp(thread[0].env, 1);	// back to thread 0
-		}
-
-		/* here when thread 1 is scheduled for the first time */
-
-		(*func)(param);			// execute func(param)
-
-		MyExitThread();			// thread 1 is done - exit
-	}
-
-	thread[1].valid = 1;	// mark the entry for the new thread valid
-
-	return(1);		// done, return new thread ID
+	return newID;		// done, return new thread ID
 }
 
-/*  	MyYieldThread(t) causes the running thread, call it T, to yield to
+/*  MyYieldThread(t) causes the running thread, call it T, to yield to
  * 	thread t.  Returns the ID of the thread that yielded to the calling
  * 	thread T, or -1 if t is an invalid ID.  Example: given two threads
  * 	with IDs 1 and 2, if thread 1 calls MyYieldThread(2), then thread 2
- *   	will resume, and if thread 2 then calls MyYieldThread(1), thread 1
+ *  will resume, and if thread 2 then calls MyYieldThread(1), thread 1
  * 	will resume by returning from its call to MyYieldThread(2), which
- *  	will return the value 2.
+ *  will return the value 2.
  */
 
 int MyYieldThread(int t)
