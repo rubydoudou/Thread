@@ -12,12 +12,13 @@
 #include "umix.h"
 #include "mycode4.h"
 
-static int MyInitThreadCalled = 0;	// 1 if MyInitThreads called, else 0
+static int MyInitThreadsCalled = 0;	// 1 if MyInitThreads called, else 0
 static int head;  // head of queue
 static int tail;  // tail of queue
 static int lastCreateThread;  
 static int currThread;
 static int lastRunThread; 
+static int queueSize;
 
 static struct thread {			// thread table
 	int valid;			// 1 if entry is valid, else 0
@@ -111,6 +112,7 @@ void MyInitThreads()
     thread[i].schedFlag = 0;
     thread[i].func = 0;
     thread[i].param = 0;
+    thread[i].schedFlag = 0;
 
 	  char stack[(i+1) * STACKSIZE];	// reserve space for thread i's stack
 	  if (((int) &stack[(i+1) * STACKSIZE-1]) - ((int) &stack[0]) + 1 != STACKSIZE) {
@@ -200,10 +202,20 @@ int MyYieldThread(int t)
 		Printf("MyYieldThread: Thread %d does not exist\n", t);
 		return(-1);
 	}
+  if (t == currThread) return t;
 
-        if (setjmp(thread[1-t].env) == 0) {
-                longjmp(thread[t].env, 1);
-        }
+  if (setjmp(thread[currThread].env) == 0) {
+    enqueue(currThread);
+    removeFromQ(t);
+    lastRunThread = currThread;
+    currThread = t;
+    longjmp(thread[t].env, 1);
+  } 
+  if (thread[currThread].schedFlag == 0) {
+    return lastRunThread;
+  } else {
+    return -1;
+  }
 }
 
 /*  	MyGetThread() returns ID of currently running thread. 
@@ -230,6 +242,13 @@ void MySchedThread()
 		Printf("MySchedThread: Must call MyInitThreads first\n");
 		Exit();
 	}
+  if (queueSize == 0) {
+    return;
+  } else {
+    int t = dequeue();
+    thread[t].schedFlag = 1;
+    MyYieldThread(t);
+  }
 }
 
 /* 	MyExitThread() causes the currently running thread to exit.  
@@ -241,4 +260,15 @@ void MyExitThread()
 		Printf("MyExitThread: Must call MyInitThreads first\n");
 		Exit();
 	}
+  thread[currThread].valid = 0;
+  thread[currThread].func = 0; 
+  thread[currThread].param = 0; 
+  thread[currThread].prev = -1; 
+  thread[currThread].next = -1;  
+  thread[currThread].schedFlag = 0;
+  if (queueSize > 0) {
+    MySchedThread();
+  } else {
+    Exit();
+  }
 }
