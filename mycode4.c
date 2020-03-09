@@ -137,16 +137,6 @@ void MyInitThreads()
 
 	thread[0].valid = 1;			// thread 0 is the current thread
   MyInitThreadsCalled = 1;
-
- 
- /* currThread = 0;     
-	
-  lastCreateThread = 0;
-  lastRunThread = 0;
-
-  head = -1;    // Initially queue is empty
-  tail = -1;
-  queueSize = 0; */
 }
 
 /* 	MyCreateThread(f, p) creates a new thread to execute f(p),
@@ -163,10 +153,6 @@ int MyCreateThread(void (*f)(), int p)
 		Printf("MyCreateThread: Must call MyInitThreads first\n");
 		Exit();
 	}
-
-  //DPrintf("Create new threads, current thread = %d. Queue:  ", currThread);
- // printQ();
-  
 
   int newID = (lastCreateThread + 1) % MAXTHREADS;
   int findSpot = 0;
@@ -189,10 +175,6 @@ int MyCreateThread(void (*f)(), int p)
   lastCreateThread = newID;
   enqueue(newID);
 
- // DPrintf("after creating, queue: ");
- // printQ();
-
-
 	return newID;		// done, return new thread ID
 }
 
@@ -208,9 +190,6 @@ int MyCreateThread(void (*f)(), int p)
 int MyYieldThread(int t)
 	// t: thread being yielded to
 {
-
-  //DPrintf("Before Yield, queue: ");
-  //printQ();
 
 	if (! MyInitThreadsCalled) {
 		Printf("MyYieldThread: Must call MyInitThreads first\n");
@@ -289,6 +268,7 @@ void MyExitThread()
 		Printf("MyExitThread: Must call MyInitThreads first\n");
 		Exit();
 	}
+
   thread[currThread].valid = 0;
   thread[currThread].func = 0; 
   thread[currThread].param = 0; 
@@ -296,10 +276,6 @@ void MyExitThread()
   thread[currThread].next = -1;  
   thread[currThread].schedFlag = 0;
   
-  
-  //DPrintf("Before Exit, queue: ");
-  //printQ();
-
   if (head != -1) {
     MySchedThread();
   } else {
