@@ -4,13 +4,29 @@
 #include <setjmp.h>
 #include "aux.h"
 #include "umix.h"
-
+#include "mycode4.c"
+#include "mycode4.h"
 void Main()
 {
-	jmp_buf env;
+  MyInitThreads();
+ 
+  for (int t = 1; t <= 3; t++) {
+    enqueue(t);
+  }
+  DPrintf("Just enqueue 1, 2, 3.\n");
+  printQ();
+  int i = dequeue();
+  int j = dequeue();
+  DPrintf("Just dequeue %d, %d.\n",i, j);
+  printQ();
+  int k = dequeue(); 
+  DPrintf("Just remove %d\n",k);
+  printQ();
+  	
+  jmp_buf env;
 	int t = 1;
 	int Setjmp(), Setjmp1(), Longjmp(), Longjmp1();
-
+/*
 	Printf("A: t = %d\n", t);			// Point A
 
 	if ((t = Setjmp(env)) == 0) {		// conditional test
@@ -23,6 +39,7 @@ void Main()
 	}
 	t = t + 1;
 	Printf("D: t = %d\n", t);			// Point D
+  */
 }
 
 int Setjmp(jmp_buf env)

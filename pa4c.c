@@ -14,18 +14,18 @@ void Main()
 	int i, t, me;
 	void printSquares(), printCubes();
 
-	InitThreads();
+	MyInitThreads();
 
-	me = GetThread();
-	t = CreateThread(printSquares, me);
-	t = CreateThread(printCubes, t);
+	me = MyGetThread();
+	t = MyCreateThread(printSquares, me);
+	t = MyCreateThread(printCubes, t);
 
 	for (i = 0; i < NUMYIELDS; i++) {
-		YieldThread(t);
+		MyYieldThread(t);
 		Printf("T%d: square = %d, cube = %d\n", me, square, cube);
 	}
 
-	ExitThread();
+	MyExitThread();
 }
 
 void printSquares(int t)
@@ -35,8 +35,8 @@ void printSquares(int t)
 
 	for (i = 0; i < NUMYIELDS; i++) {
 		square = i * i;
-		Printf("T%d: %d squared = %d\n", GetThread(), i, square);
-		YieldThread(t);
+		Printf("T%d: %d squared = %d\n", MyGetThread(), i, square);
+		MyYieldThread(t);
 	}
 }
 
@@ -47,7 +47,7 @@ void printCubes(int t)
 
 	for (i = 0; i < NUMYIELDS; i++) {
 		cube = i * i * i;
-		Printf("T%d: %d cubed = %d\n", GetThread(), i, cube);
-		YieldThread(t);
+		Printf("T%d: %d cubed = %d\n", MyGetThread(), i, cube);
+		MyYieldThread(t);
 	}
 }
